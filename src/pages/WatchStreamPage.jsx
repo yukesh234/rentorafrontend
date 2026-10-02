@@ -21,12 +21,15 @@ export default function WatchStreamPage() {
   const [broadcasterId, setBroadcasterId] = useState(null);
   const authIsLoading = useAuthStore((s) => s.isLoading);
 
-  const { remoteStream, connectionState } = useWebRTCViewer(
+  const { remoteStream, connectionState, streamEnded } = useWebRTCViewer(
     bookingId,
     userid,
     broadcasterId
   );
   const { messages, sendMessage } = useLiveChat(bookingId, userid, username);
+
+  // the live is over if the host ended it, or the connection to the host dropped
+  const isOver = streamEnded || connectionState === 'disconnected';
 
   // Fetch stream metadata once — NOT dependent on remoteStream
   useEffect(() => {
@@ -55,7 +58,7 @@ export default function WatchStreamPage() {
   // The <video> element is now ALWAYS rendered (see JSX below), so
   // videoRef.current is never null by the time remoteStream arrives.
   useEffect(() => {
-    if (videoRef.current && remoteStream) {
+    if (videoRef.current) {
       videoRef.current.srcObject = remoteStream;
     }
   }, [remoteStream]);
@@ -87,17 +90,24 @@ export default function WatchStreamPage() {
       <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[1fr_320px]">
         <div>
           <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 rounded-full bg-red-500/15 px-3 py-1 text-xs font-medium text-red-400">
-              <Radio size={12} className="animate-pulse" />
-              LIVE
-            </span>
+            {isOver ? (
+              <span className="flex items-center gap-1.5 rounded-full bg-[#2A2622] px-3 py-1 text-xs font-medium text-[#8A7F76]">
+                <Radio size={12} />
+                ENDED
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 rounded-full bg-red-500/15 px-3 py-1 text-xs font-medium text-red-400">
+                <Radio size={12} className="animate-pulse" />
+                LIVE
+              </span>
+            )}
             <h1 className="font-['Outfit'] text-lg font-semibold text-[#F5F0EB]">
               {stream?.listingTitle}
             </h1>
           </div>
           <p className="mt-1 text-xs text-[#8A7F76]">Hosted by {stream?.broadcasterName}</p>
 
-          {/* video element is ALWAYS mounted; the connecting overlay sits on top */}
+          {/* video element is ALWAYS mounted; the overlays sit on top */}
           <div className="relative mt-4 aspect-video overflow-hidden rounded-xl border border-[#2A2622] bg-black">
             <video
               ref={videoRef}
@@ -105,17 +115,38 @@ export default function WatchStreamPage() {
               playsInline
               className="h-full w-full object-cover"
             />
-            {connectionState === 'connecting' && (
+            {connectionState === 'connecting' && !isOver && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 text-[#8A7F76]">
                 <Loader2 size={24} className="animate-spin" />
                 <span className="text-xs">Connecting to stream…</span>
+              </div>
+            )}
+            {isOver && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/90 px-4 text-center">
+                <Radio size={26} className="text-[#6B615A]" />
+                <div>
+                  <p className="font-['Outfit'] text-base font-semibold text-[#F5F0EB]">
+                    {streamEnded ? 'This live has ended' : 'Connection lost'}
+                  </p>
+                  <p className="mt-1 text-xs text-[#8A7F76]">
+                    {streamEnded
+                      ? 'Thanks for watching.'
+                      : 'The host may have ended the live or lost their connection.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/live')}
+                  className="rounded-lg bg-[#C2542D] px-4 py-2 text-sm font-medium text-[#1C1917] transition-colors hover:bg-[#D4A574]"
+                >
+                  Browse more live streams
+                </button>
               </div>
             )}
           </div>
         </div>
 
         <div className="h-100 lg:h-auto">
-          <LiveChatPanel messages={messages} onSend={sendMessage} />
+          <LiveChatPanel messages={messages} onSend={sendMessage} disabled={isOver} />
         </div>
       </div>
     </div>

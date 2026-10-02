@@ -6,6 +6,18 @@ import { initiatePayment } from '../../services/paymentService';
 import EsewaRedirectForm from '../payment/EsewaRedirectionForm';
 import DateTimePicker from './DateTimePicker';
 
+// "09:30:00" -> 570. A closing time of 00:00 means end of day (1440).
+function toMinutes(value, isClosing = false) {
+  if (!value) return null;
+  const [h, m] = value.split(':').map(Number);
+  const mins = h * 60 + (m || 0);
+  return isClosing && mins === 0 ? 24 * 60 : mins;
+}
+
+function minutesOfDay(date) {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
 export default function BookingModal({ listing, onClose }) {
   const [startTime, setStartTime] = useState(null);
   const [endTime, setEndTime] = useState(null);
@@ -20,29 +32,38 @@ export default function BookingModal({ listing, onClose }) {
 
   const isOutOfStock = listing.quantity <= 0;
 
+  // venues (sports / entertainment) with opening hours
+  const openMins = toMinutes(listing.openingTime);
+  const closeMins = toMinutes(listing.closingTime, true);
+  const hasHours =
+    listing.category !== 'UTILITY' &&
+    openMins !== null &&
+    closeMins !== null &&
+    closeMins > openMins;
+
   function calculateDurationUnits(start, end, unit) {
-  if (!start || !end) return 0;
-  const ms = end.getTime() - start.getTime();
-  const hours = ms / (1000 * 60 * 60);
+    if (!start || !end) return 0;
+    const ms = end.getTime() - start.getTime();
+    const hours = ms / (1000 * 60 * 60);
 
-  switch (unit) {
-    case 'hour':
-      return Math.ceil(hours); // round up partial hours
-    case 'day':
-      return Math.ceil(hours / 24);
-    case 'week':
-      return Math.ceil(hours / (24 * 7));
-    default:
-      return 1;
+    switch (unit) {
+      case 'hour':
+        return Math.ceil(hours); // round up partial hours
+      case 'day':
+        return Math.ceil(hours / 24);
+      case 'week':
+        return Math.ceil(hours / (24 * 7));
+      default:
+        return 1;
+    }
   }
-}
 
-const durationUnits = calculateDurationUnits(startTime, endTime, listing.priceUnit);
+  const durationUnits = calculateDurationUnits(startTime, endTime, listing.priceUnit);
 
-const estimatedTotal =
-  listing.pricePerUnit && durationUnits > 0
-    ? (listing.pricePerUnit * durationUnits * quantity).toFixed(2)
-    : '0.00';
+  const estimatedTotal =
+    listing.pricePerUnit && durationUnits > 0
+      ? (listing.pricePerUnit * durationUnits * quantity).toFixed(2)
+      : '0.00';
 
   useEffect(() => {
     let isMounted = true;
@@ -81,6 +102,17 @@ const estimatedTotal =
     if (durationMs < 30 * 60 * 1000) {
       return 'Booking must be at least 30 minutes long.';
     }
+
+    if (hasHours) {
+      const label = `${listing.openingTime.slice(0, 5)} – ${listing.closingTime.slice(0, 5)}`;
+      if (startTime.toDateString() !== endTime.toDateString()) {
+        return `This venue must be booked within a single day (open ${label}).`;
+      }
+      if (minutesOfDay(startTime) < openMins || minutesOfDay(endTime) > closeMins) {
+        return `This venue is only open ${label}. Please pick a time within opening hours.`;
+      }
+    }
+
     const qty = Number(quantity);
     if (!Number.isInteger(qty) || qty < 1) {
       return 'Quantity must be a whole number of at least 1.';
@@ -200,10 +232,16 @@ const estimatedTotal =
                 onChange={(date) => {
                   setStartTime(date);
                   if (endTime && date && endTime <= date) setEndTime(null);
+                  // venues are single-day: drop an end time that falls on another day
+                  if (hasHours && endTime && date && endTime.toDateString() !== date.toDateString()) {
+                    setEndTime(null);
+                  }
                 }}
                 minDate={new Date()}
                 bookedSlots={bookedSlots}
                 maxQuantity={listing.quantity}
+                openingTime={hasHours ? listing.openingTime : undefined}
+                closingTime={hasHours ? listing.closingTime : undefined}
               />
 
               <DateTimePicker
@@ -211,8 +249,12 @@ const estimatedTotal =
                 selected={endTime}
                 onChange={setEndTime}
                 minDate={startTime || new Date()}
+                maxDate={hasHours && startTime ? startTime : undefined}
                 bookedSlots={bookedSlots}
                 maxQuantity={listing.quantity}
+                openingTime={hasHours ? listing.openingTime : undefined}
+                closingTime={hasHours ? listing.closingTime : undefined}
+                isEnd
               />
 
               <div>

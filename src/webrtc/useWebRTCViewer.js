@@ -6,6 +6,7 @@ const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 export function useWebRTCViewer(bookingId, userId, broadcasterId) {
   const [remoteStream, setRemoteStream] = useState(null);
   const [connectionState, setConnectionState] = useState('connecting'); // connecting | connected | disconnected
+  const [streamEnded, setStreamEnded] = useState(false); // the host ended the live
   const pcRef = useRef(null);
   const signalingRef = useRef(null);
 
@@ -13,13 +14,13 @@ export function useWebRTCViewer(bookingId, userId, broadcasterId) {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pcRef.current = pc;
 
-          pc.ontrack = (event) => {
-        console.log('Viewer got remote track:', event.streams[0], event.track);
-        setRemoteStream(event.streams[0]);
-      };
+    pc.ontrack = (event) => {
+      console.log('Viewer got remote track:', event.streams[0], event.track);
+      setRemoteStream(event.streams[0]);
+    };
     pc.oniceconnectionstatechange = () => {
-        console.log('ICE state:', pc.iceConnectionState);
-      };
+      console.log('ICE state:', pc.iceConnectionState);
+    };
 
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'connected') setConnectionState('connected');
@@ -56,6 +57,16 @@ export function useWebRTCViewer(bookingId, userId, broadcasterId) {
     async function handleSignal(message) {
       console.log('Viewer received:', message);
       const { type, senderId, targetId, payload } = message;
+
+      // the server announces the end of the stream to everybody on this booking's topic
+      if (type === 'stream-ended') {
+        setStreamEnded(true);
+        setConnectionState('disconnected');
+        setRemoteStream(null);
+        pc.close();
+        return;
+      }
+
       if (targetId && targetId !== userId) return;
       if (senderId !== broadcasterId) return; // only trust the actual broadcaster
 
@@ -83,5 +94,5 @@ export function useWebRTCViewer(bookingId, userId, broadcasterId) {
     };
   }, [bookingId, userId, broadcasterId]);
 
-  return { remoteStream, connectionState };
+  return { remoteStream, connectionState, streamEnded };
 }

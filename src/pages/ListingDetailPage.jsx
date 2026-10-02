@@ -4,6 +4,7 @@ import { useParams, useOutletContext } from 'react-router-dom';
 import { MapPin, Clock, Loader2, Heart } from 'lucide-react';
 import { getListingById } from '../services/listingService';
 import { getReviewsForListing } from '../services/reviewService';
+import { useAuthStore } from '../stores/Authstore';
 import ImageGallery from '../components/listing/ImageGallery';
 import RatingSummary from '../components/listing/RatingSummary';
 import ReviewsList from '../components/listing/ReviewsList';
@@ -18,6 +19,7 @@ const CATEGORY_LABELS = {
 export default function ListingDetailPage() {
   const { id } = useParams();
   const { isAuthenticated, openAuth } = useOutletContext();
+  const authIsLoading = useAuthStore((s) => s.isLoading);
 
   const [listing, setListing] = useState(null);
   const [reviews, setReviews] = useState([]);
@@ -26,29 +28,42 @@ export default function ListingDetailPage() {
   const [bookingOpen, setBookingOpen] = useState(false);
 
   useEffect(() => {
+    // wait for the silent-refresh attempt to finish so the token is ready
+    if (authIsLoading) return;
+
     let cancelled = false;
     async function fetchAll() {
       setIsLoading(true);
       setLoadError('');
-      try {
-        const [listingData, reviewsData] = await Promise.all([
-          getListingById(id),
-          getReviewsForListing(id),
-        ]);
-        if (cancelled) return;
-        setListing(listingData);
-        setReviews(reviewsData);
-      } catch (err) {
-        if (!cancelled) setLoadError('This listing could not be found.');
-      } finally {
-        if (!cancelled) setIsLoading(false);
+
+      // independent requests: a reviews failure must not hide the listing
+      const [listingResult, reviewsResult] = await Promise.allSettled([
+        getListingById(id),
+        getReviewsForListing(id),
+      ]);
+      if (cancelled) return;
+
+      if (listingResult.status === 'fulfilled') {
+        setListing(listingResult.value);
+      } else {
+        console.error('Failed to load listing', listingResult.reason);
+        setLoadError('This listing could not be found.');
       }
+
+      if (reviewsResult.status === 'fulfilled') {
+        setReviews(reviewsResult.value);
+      } else {
+        console.error('Failed to load reviews', reviewsResult.reason);
+        setReviews([]);
+      }
+
+      setIsLoading(false);
     }
     fetchAll();
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, authIsLoading]);
 
   function handleBookNow() {
     if (!isAuthenticated) {
@@ -75,6 +90,7 @@ export default function ListingDetailPage() {
   }
 
   const isOutOfStock = listing.quantity <= 0;
+  const reviewCount = listing.reviewCount ?? reviews.length;
 
   return (
     <div className="min-h-screen bg-[#1C1917] px-4 py-8 sm:px-6 lg:px-8">
@@ -101,7 +117,7 @@ export default function ListingDetailPage() {
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-4">
-              <RatingSummary averageRating={listing.averageRating} reviewCount={listing.reviewCount} />
+              <RatingSummary averageRating={listing.averageRating} reviewCount={reviewCount} />
               <div className="flex items-center gap-1 text-xs text-[#8A7F76]">
                 <MapPin size={13} />
                 {listing.city}, {listing.district}
@@ -116,7 +132,7 @@ export default function ListingDetailPage() {
 
             <div className="mt-5 flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-[#2A2622]">
-                {listing.owner.profile_picture ? (
+                {listing.owner?.profile_picture ? (
                   <img
                     src={listing.owner.profile_picture}
                     alt={listing.owner.name}
@@ -124,12 +140,12 @@ export default function ListingDetailPage() {
                   />
                 ) : (
                   <span className="text-xs font-semibold text-[#D4A574]">
-                    {listing.owner.name?.[0]?.toUpperCase()}
+                    {listing.owner?.name?.[0]?.toUpperCase()}
                   </span>
                 )}
               </div>
               <div>
-                <p className="text-sm text-[#F5F0EB]">{listing.owner.name}</p>
+                <p className="text-sm text-[#F5F0EB]">{listing.owner?.name}</p>
                 <p className="text-xs text-[#6B615A]">Listing owner</p>
               </div>
             </div>
@@ -143,7 +159,7 @@ export default function ListingDetailPage() {
 
             <div className="mt-8">
               <h2 className="mb-3 text-sm font-semibold text-[#F5F0EB]">
-                Reviews ({listing.reviewCount})
+                Reviews ({reviewCount})
               </h2>
               <ReviewsList reviews={reviews} />
             </div>

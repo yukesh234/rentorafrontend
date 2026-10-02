@@ -11,8 +11,8 @@ export async function approveListing(id) {
   await adminApi.post(`${BASE}/listings/${id}/approve`);
 }
 
-export async function rejectListing(id) {
-  await adminApi.post(`${BASE}/listings/${id}/reject`);
+export async function rejectListing(id, reason) {
+  await adminApi.post(`${BASE}/listings/${id}/reject`, { reason });
 }
 
 export async function getAllUsers() {

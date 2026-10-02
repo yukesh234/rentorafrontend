@@ -1,15 +1,19 @@
 /* eslint-disable no-unused-vars */
 import { useEffect, useState } from 'react';
-import { BarChart3, Calendar, DollarSign, XCircle, AlertCircle, Download } from 'lucide-react';
 import {
-  getSummary, getBookingsOverTime, getCategoryBreakdown, getTopListings, getListingOptions,
+  BarChart3, Calendar, DollarSign, XCircle, AlertCircle, Download,
+  Receipt, Users, Repeat, Wallet,
+} from 'lucide-react';
+import {
+  getSummary, getBookingsOverTime, getCategoryBreakdown, getBusiestDays,
+  getTopListings, getListingOptions,
 } from '../services/analyticsService';
 import { exportToCsv } from '../utils/exportCsv';
 import SummaryCard from '../components/analytics/SummaryCard';
 import BookingsChart from '../components/analytics/BookingsChart';
 import CategoryBreakdownChart from '../components/analytics/CategoryBreakdownChart';
+import BusiestDaysChart from '../components/analytics/BusiestDaysChart';
 import TopListingsTable from '../components/analytics/TopListingsTable';
-import DemandForecastPlaceholder from '../components/analytics/DemandForecastPlaceholder';
 import AnalyticsFilters from '../components/analytics/AnalyticsFilters';
 import DemandForecast from '../components/analytics/DemandForecast';
 import { useAuthStore } from '../stores/Authstore';
@@ -18,7 +22,6 @@ import { useAuthStore } from '../stores/Authstore';
 function toRequestFilters(fs) {
   let startDate;
   let endDate;
-
 
   if (fs.preset !== null) {
     endDate = new Date();
@@ -34,10 +37,22 @@ function toRequestFilters(fs) {
   return { listingId: fs.listingId || null, startDate, endDate };
 }
 
+// % change vs the previous period.
+// undefined = nothing to show, null = previous period had no data, number = % change
+function percentChange(current, previous) {
+  if (previous === null || previous === undefined) return undefined;
+  const cur = Number(current);
+  const prev = Number(previous);
+  if (!Number.isFinite(cur) || !Number.isFinite(prev)) return undefined;
+  if (prev === 0) return cur === 0 ? 0 : null;
+  return ((cur - prev) / prev) * 100;
+}
+
 export default function AnalyticsPage() {
   const [summary, setSummary] = useState(null);
   const [timeSeries, setTimeSeries] = useState([]);
   const [categoryData, setCategoryData] = useState([]);
+  const [busiestDays, setBusiestDays] = useState([]);
   const [topListings, setTopListings] = useState([]);
   const [listingOptions, setListingOptions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,7 +79,6 @@ export default function AnalyticsPage() {
           getListingOptions(),
           getTopListings(5),
         ]);
-        // console.log("listing data from top listings: ", listingsData, topData);
         setListingOptions(listingsData);
         setTopListings(topData);
       } catch (err) {
@@ -76,21 +90,25 @@ export default function AnalyticsPage() {
 
   // Refetches whenever the user changes a filter
   useEffect(() => {
+    if (authIsLoading) return; // don't fire before the access token is ready
+
     let cancelled = false; // stops an older, slower response overwriting a newer one
 
     async function run() {
       setIsLoading(true);
       try {
         const f = toRequestFilters(filterState);
-        const [summaryData, seriesData, catData] = await Promise.all([
+        const [summaryData, seriesData, catData, daysData] = await Promise.all([
           getSummary(f),
           getBookingsOverTime(f),
           getCategoryBreakdown(f),
+          getBusiestDays(f),
         ]);
         if (cancelled) return;
         setSummary(summaryData);
         setTimeSeries(seriesData);
         setCategoryData(catData);
+        setBusiestDays(daysData);
       } catch (err) {
         if (!cancelled) console.error('Failed to load analytics', err);
       } finally {
@@ -102,7 +120,7 @@ export default function AnalyticsPage() {
     return () => {
       cancelled = true;
     };
-  }, [filterState]);
+  }, [filterState, authIsLoading]);
 
   function handleExport() {
     exportToCsv(
@@ -166,11 +184,13 @@ export default function AnalyticsPage() {
                 label="Total bookings"
                 value={summary.totalBookings}
                 sublabel={`${summary.confirmedBookings} confirmed`}
+                delta={percentChange(summary.totalBookings, summary.previousTotalBookings)}
               />
               <SummaryCard
                 icon={DollarSign}
                 label="Total revenue"
                 value={`Rs. ${summary.totalRevenue}`}
+                delta={percentChange(summary.totalRevenue, summary.previousRevenue)}
               />
               <SummaryCard
                 icon={XCircle}
@@ -188,6 +208,33 @@ export default function AnalyticsPage() {
               />
             </div>
 
+            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <SummaryCard
+                icon={Receipt}
+                label="Avg booking value"
+                value={`Rs. ${Number(summary.averageBookingValue).toLocaleString()}`}
+                sublabel="excluding cancelled"
+              />
+              <SummaryCard
+                icon={Users}
+                label="Unique renters"
+                value={summary.uniqueRenters}
+                sublabel="in this range"
+              />
+              <SummaryCard
+                icon={Repeat}
+                label="Repeat renters"
+                value={`${(summary.repeatRenterRate * 100).toFixed(0)}%`}
+                sublabel="booked 2+ times"
+              />
+              <SummaryCard
+                icon={Wallet}
+                label="Cash / eSewa"
+                value={`${summary.cashBookings} / ${summary.esewaBookings}`}
+                sublabel="bookings by payment"
+              />
+            </div>
+
             {Number(summary.refundsOwed) > 0 && (
               <div className="mt-4 rounded-lg border border-[#E07856]/30 bg-[#3A1F1A] px-4 py-3 text-sm text-[#E07856]">
                 Rs. {summary.refundsOwed} in refunds owed for cancelled eSewa bookings.
@@ -201,7 +248,8 @@ export default function AnalyticsPage() {
               <CategoryBreakdownChart data={categoryData} />
             </div>
 
-            <div className="mt-4">
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <BusiestDaysChart data={busiestDays} />
               <TopListingsTable listings={topListings} />
             </div>
 

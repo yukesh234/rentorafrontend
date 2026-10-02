@@ -1,9 +1,10 @@
 /* eslint-disable react-hooks/immutability */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, XCircle, Users, ListChecks, Loader2, LogOut } from 'lucide-react';
+import { CheckCircle2, XCircle, Users, ListChecks, Loader2, LogOut, Eye } from 'lucide-react';
 import { getPendingListings, approveListing, rejectListing, getAllUsers } from '../../services/adminService';
 import { useAdminAuthStore } from '../../stores/AdminAuthstore.js';
+import AdminListingModal from '../../components/admin/AdminListingModal.jsx';
 
 export default function AdminDashboardPage() {
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ export default function AdminDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [actingId, setActingId] = useState(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [viewing, setViewing] = useState(null); // { listing, rejecting } | null
 
   useEffect(() => {
     fetchAll();
@@ -42,10 +44,10 @@ export default function AdminDashboardPage() {
     }
   }
 
-  async function handleReject(id) {
+  async function handleReject(id, reason) {
     setActingId(id);
     try {
-      await rejectListing(id);
+      await rejectListing(id, reason);
       setPending((prev) => prev.filter((l) => l.id !== id));
     } finally {
       setActingId(null);
@@ -113,6 +115,13 @@ export default function AdminDashboardPage() {
                   </div>
                   <div className="flex gap-2">
                     <button
+                      onClick={() => setViewing({ listing: l, rejecting: false })}
+                      className="flex items-center gap-1 rounded-lg border border-[#2A2622] px-3 py-1.5 text-xs font-medium text-[#D4A574] hover:bg-[#2A2622]"
+                    >
+                      <Eye size={13} />
+                      View
+                    </button>
+                    <button
                       onClick={() => handleApprove(l.id)}
                       disabled={actingId === l.id}
                       className="flex items-center gap-1 rounded-lg border border-green-500/30 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/10 disabled:opacity-50"
@@ -121,7 +130,7 @@ export default function AdminDashboardPage() {
                       Approve
                     </button>
                     <button
-                      onClick={() => handleReject(l.id)}
+                      onClick={() => setViewing({ listing: l, rejecting: true })}
                       disabled={actingId === l.id}
                       className="flex items-center gap-1 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-medium text-[#E07856] hover:bg-red-500/10 disabled:opacity-50"
                     >
@@ -164,6 +173,23 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </div>
+
+      {viewing && (
+        <AdminListingModal
+          listing={viewing.listing}
+          startRejecting={viewing.rejecting}
+          isActing={actingId === viewing.listing.id}
+          onClose={() => setViewing(null)}
+          onApprove={async (id) => {
+            await handleApprove(id);
+            setViewing(null);
+          }}
+          onReject={async (id, reason) => {
+            await handleReject(id, reason);
+            setViewing(null);
+          }}
+        />
+      )}
     </div>
   );
 }

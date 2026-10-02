@@ -121,6 +121,7 @@ export default function ManageListingsPage() {
                   listing={listing}
                   onEdit={handleEditRequest}
                   onDeleteRequest={setPendingDelete}
+                  onResubmitted={handleUpdated}
                 />
               ))}
             </div>

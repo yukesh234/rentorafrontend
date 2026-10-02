@@ -9,20 +9,22 @@ function buildParams({ listingId, startDate, endDate } = {}) {
 }
 
 export async function getSummary(filters) {
-  console.log("for get summary",filters)
   const res = await axios.get(`/api/analytics/summary?${buildParams(filters)}`);
   return res.data;
 }
 
 export async function getBookingsOverTime(filters) {
-  console.log(filters)
   const res = await axios.get(`/api/analytics/bookings-over-time?${buildParams(filters)}`);
   return res.data;
 }
 
 export async function getCategoryBreakdown(filters) {
-  console.log(filters)
   const res = await axios.get(`/api/analytics/category-breakdown?${buildParams(filters)}`);
+  return res.data;
+}
+
+export async function getBusiestDays(filters) {
+  const res = await axios.get(`/api/analytics/busiest-days?${buildParams(filters)}`);
   return res.data;
 }
 

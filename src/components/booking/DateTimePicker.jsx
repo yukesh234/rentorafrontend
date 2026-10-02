@@ -14,19 +14,39 @@ import { CalendarDays } from 'lucide-react';
  *  - selected: Date | null
  *  - onChange: (date: Date) => void
  *  - minDate: Date (optional)
+ *  - maxDate: Date (optional)
  *  - error: string (optional)
  *  - bookedSlots: Array<{ startTime, endTime, quantity }> (optional)
  *  - maxQuantity: number (optional — listing.quantity)
+ *  - openingTime / closingTime: "HH:mm" or "HH:mm:ss" (optional, venues only)
+ *  - isEnd: boolean — true for the end-time picker (end may equal closing time)
  */
+
+// "09:30:00" -> 570 (minutes since midnight). A closing time of 00:00 means end of day (1440).
+function toMinutes(value, isClosing = false) {
+  if (!value) return null;
+  const [h, m] = value.split(':').map(Number);
+  const mins = h * 60 + (m || 0);
+  return isClosing && mins === 0 ? 24 * 60 : mins;
+}
+
 export default function DateTimePicker({
   label,
   selected,
   onChange,
   minDate,
+  maxDate,
   error,
   bookedSlots = [],
   maxQuantity = 1,
+  openingTime,
+  closingTime,
+  isEnd = false,
 }) {
+  const openMins = toMinutes(openingTime);
+  const closeMins = toMinutes(closingTime, true);
+  const hasHours = openMins !== null && closeMins !== null && closeMins > openMins;
+
   function bookedQuantityOnDay(date) {
     return bookedSlots
       .filter((slot) => {
@@ -58,6 +78,16 @@ export default function DateTimePicker({
   }
 
   function filterTime(time) {
+    // 1) outside opening hours -> not selectable
+    if (hasHours) {
+      const mins = time.getHours() * 60 + time.getMinutes();
+      const withinHours = isEnd
+        ? mins > openMins && mins <= closeMins // end can be exactly at closing time
+        : mins >= openMins && mins < closeMins; // start can be exactly at opening time
+      if (!withinHours) return false;
+    }
+
+    // 2) fully booked -> not selectable
     const booked = bookedSlots
       .filter((slot) => {
         const slotStart = new Date(slot.startTime);
@@ -85,6 +115,7 @@ export default function DateTimePicker({
           showTimeSelect
           timeIntervals={30}
           minDate={minDate}
+          maxDate={maxDate}
           filterTime={filterTime}
           dayClassName={dayClassName}
           renderDayContents={renderDayContents}
@@ -96,6 +127,12 @@ export default function DateTimePicker({
         />
       </div>
       {error && <p className="mt-1.5 pl-1 text-[11.5px] text-red-400">{error}</p>}
+
+      {hasHours && (
+        <p className="mt-1.5 pl-1 text-[10.5px] text-[#6B615A]">
+          Open {openingTime.slice(0, 5)} – {closingTime.slice(0, 5)}
+        </p>
+      )}
 
       {bookedSlots.length > 0 && (
         <div className="mt-1.5 flex items-center gap-3 pl-1 text-[10.5px] text-[#6B615A]">
