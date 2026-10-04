@@ -3,10 +3,8 @@ import {
   Menu,
   X,
   ChevronDown,
-  Bell,
   CalendarDays,
   Building2,
-  Settings,
   LogOut,
   UserRound,
   Inbox,
@@ -14,69 +12,50 @@ import {
   Brackets,
   BarChart3,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom"; 
-
+import { useNavigate } from "react-router-dom";
 
 /**
  * Navbar — Rentora
- * -----------------------------------------------------------------------
- * Dark UI with a terracotta → sand gradient signature (Kathmandu brick
- * terracotta, fading into a muted sand/gold) accenting the wordmark and
- * CTAs.
- *
- * AUTH WIRING:
- * Everything below the "AUTH STATE" comment is placeholder state meant to
- * be swapped for your real AuthContext later, e.g.:
- *
- *   const { isAuthenticated, user, logout } = useAuth();
- *
- * `user` is expected to look like: { name, email, avatarUrl }
- * If `user.avatarUrl` is empty, initials are rendered instead.
- * -----------------------------------------------------------------------
+ * Dark UI with a terracotta → sand accent on the wordmark and CTAs.
+ * Auth state is passed in from Layout (isAuthenticated, user, onLogout).
  */
 
 const NAV_LINKS = [
   { label: "Browse live", href: "/live", icon: Building2 },
-  { label: "Events", href: "/events", icon: CalendarDays },
+  { label: "Tournaments", href: "/tournaments", icon: Trophy },
 ];
 
 export default function Navbar({
   onLoginClick,
   onSignupClick,
-  // Pass these down once you have AuthContext, e.g.:
-  //   const { isAuthenticated, user, logout } = useAuth();
-  //   <Navbar isAuthenticated={isAuthenticated} user={user} onLogout={logout} ... />
-  // If omitted, Navbar falls back to local demo state below (handy for
-  // previewing the component on its own).
   isAuthenticated: isAuthenticatedProp,
   user: userProp,
   onLogout,
 } = {}) {
-  // ---------------- AUTH STATE (demo fallback — replace with useAuth() later) ----------------
+  const navigate = useNavigate();
+
+  //  AUTH STATE (demo fallback when used standalone) 
   const [demoAuthenticated, setDemoAuthenticated] = useState(true);
   const [demoUser] = useState({
     name: "Yukesh Adhikari",
     email: "yukesh@rentora.com",
-    avatarUrl: "", // leave empty to show initials
+    avatarUrl: "",
   });
 
   const isControlled = isAuthenticatedProp !== undefined;
   const isAuthenticated = isControlled ? isAuthenticatedProp : demoAuthenticated;
   const user = isControlled ? userProp : demoUser;
+
   const handleLogout = () => {
     if (onLogout) {
-      onLogout()
-      navigate("/")
-    }
-    else setDemoAuthenticated(false);
+      onLogout();
+      navigate("/");
+    } else setDemoAuthenticated(false);
   };
-  // console.log("Navbar render: isAuthenticated=", isAuthenticated, "user=", user);
-  
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -138,7 +117,6 @@ export default function Navbar({
 
       <header className="sticky top-0 z-50 w-full border-b border-white/6 bg-[#1C1917]/80 backdrop-blur-xl rt-font-body">
         <div className="relative mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          {/* ambient glow behind logo */}
           <div className="rt-glow pointer-events-none absolute -left-10 -top-16 h-40 w-40 blur-2xl" />
 
           {/* Logo / wordmark */}
@@ -160,7 +138,6 @@ export default function Navbar({
                   <stop offset="100%" stopColor="#D4A574" />
                 </linearGradient>
               </defs>
-              {/* minimal Kathmandu-valley skyline mark */}
               <path
                 d="M2 24L8 14L12 19L17 9L22 17L26 12L30 24H2Z"
                 fill="url(#rt-mark)"
@@ -188,7 +165,6 @@ export default function Navbar({
 
           {/* Right side */}
           <div className="relative z-10 flex items-center gap-3">
-            {/* "List your place" CTA — desktop only */}
             <a
               href="/Managelisting"
               className="hidden lg:inline-flex items-center rounded-full px-4 py-2 text-[13px] font-medium text-white/80 hover:text-white hover:bg-white/6 transition-colors"
@@ -197,84 +173,71 @@ export default function Navbar({
             </a>
 
             {isAuthenticated ? (
-              <>
-                {/* Notification bell */}
+              <div className="relative" ref={menuRef}>
                 <button
                   type="button"
-                  aria-label="Notifications"
-                  className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full text-white/70 hover:text-white hover:bg-white/6 transition-colors"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  className="flex items-center gap-2 rounded-full border border-white/10 py-1 pl-1 pr-2.5 hover:border-white/20 hover:bg-white/4 transition-colors"
                 >
-                  <Bell size={17} strokeWidth={2} />
+                  <span className="rt-gradient-ring flex h-7 w-7 items-center justify-center rounded-full p-[1.5px]">
+                    <span className="flex h-full w-full items-center justify-center rounded-full bg-[#1C1917] overflow-hidden">
+                      {user?.profilePicture ? (
+                        <img
+                          src={user.profilePicture}
+                          alt={user.name}
+                          className="h-full w-full object-cover rounded-full"
+                        />
+                      ) : (
+                        <span className="text-[10px] font-semibold text-white">
+                          {initials}
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                  <span className="hidden sm:block max-w-30 truncate text-[13px] font-medium text-white/85">
+                    {user?.name || user?.email}
+                  </span>
+                  <ChevronDown
+                    size={14}
+                    strokeWidth={2}
+                    className={`text-white/50 transition-transform ${
+                      menuOpen ? "rotate-180" : ""
+                    }`}
+                  />
                 </button>
 
-                {/* Account menu */}
-                <div className="relative" ref={menuRef}>
-                  <button
-                    type="button"
-                    onClick={() => setMenuOpen((v) => !v)}
-                    className="flex items-center gap-2 rounded-full border border-white/10 py-1 pl-1 pr-2.5 hover:border-white/20 hover:bg-white/4 transition-colors"
-                  >
-                    <span className="rt-gradient-ring flex h-7 w-7 items-center justify-center rounded-full p-[1.5px]">
-                      <span className="flex h-full w-full items-center justify-center rounded-full bg-[#1C1917] overflow-hidden">
-                        {user?.profilePicture ? (
-                          <img
-                            src={user.profilePicture}
-                            alt={user.name}
-                            className="h-full w-full object-cover rounded-full"
-                          />
-                        ) : (
-                          <span className="text-[10px] font-semibold text-white">
-                            {initials}
-                          </span>
-                        )}
-                      </span>
-                    </span>
-                    <span className="hidden sm:block max-w-30 truncate text-[13px] font-medium text-white/85">
-                      {user?.name || user?.email}
-                    </span>
-                    <ChevronDown
-                      size={14}
-                      strokeWidth={2}
-                      className={`text-white/50 transition-transform ${
-                        menuOpen ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-
-                  {menuOpen && (
-                    <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#262019] shadow-2xl shadow-black/40">
-                      <div className="px-4 py-3 border-b border-white/6">
-                        <p className="truncate text-[13px] font-medium text-white">
-                          {user?.name}
-                        </p>
-                        <p className="truncate text-[12px] text-white/50">
-                          {user?.email}
-                        </p>
-                      </div>
-                      <div className="py-1.5">
-                        <MenuItem icon={UserRound} label="Profile" href="/profile" />
-                        <MenuItem icon={Building2} label="My listings" href="/Managelisting" />
-                        <MenuItem icon={CalendarDays} label="My bookings" href="/bookings" />
-                        <MenuItem icon={Inbox} label="Bookings received" href="/owner-bookings" />
-                        <MenuItem icon={Trophy} label="Tournaments" href="/tournaments" />
-                        <MenuItem icon={Brackets} label="My tournaments" href="/owner-Tournaments" />
-                        <MenuItem icon={BarChart3} label="Analytics" href="/analytics" />
-                        <MenuItem icon={Settings} label="Settings" href="/settings" />
-                      </div>
-                      <div className="border-t border-white/6 py-1.5">
-                        <button
-                          type="button"
-                          onClick={handleLogout}
-                          className="flex w-full items-center gap-2.5 px-4 py-2 text-[13px] text-red-400 hover:bg-white/6 transition-colors"
-                        >
-                          <LogOut size={15} strokeWidth={2} />
-                          Log out
-                        </button>
-                      </div>
+                {menuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#262019] shadow-2xl shadow-black/40">
+                    <div className="px-4 py-3 border-b border-white/6">
+                      <p className="truncate text-[13px] font-medium text-white">
+                        {user?.name}
+                      </p>
+                      <p className="truncate text-[12px] text-white/50">
+                        {user?.email}
+                      </p>
                     </div>
-                  )}
-                </div>
-              </>
+                    <div className="py-1.5">
+                      <MenuItem icon={UserRound} label="Profile" href="/profile" />
+                      <MenuItem icon={Building2} label="My listings" href="/Managelisting" />
+                      <MenuItem icon={CalendarDays} label="My bookings" href="/bookings" />
+                      <MenuItem icon={Inbox} label="Bookings received" href="/owner-bookings" />
+                      <MenuItem icon={Trophy} label="Tournaments" href="/tournaments" />
+                      <MenuItem icon={Brackets} label="My tournaments" href="/owner-tournaments" />
+                      <MenuItem icon={BarChart3} label="Analytics" href="/analytics" />
+                    </div>
+                    <div className="border-t border-white/6 py-1.5">
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="flex w-full items-center gap-2.5 px-4 py-2 text-[13px] text-red-400 hover:bg-white/6 transition-colors"
+                      >
+                        <LogOut size={15} strokeWidth={2} />
+                        Log out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="hidden sm:flex items-center gap-2">
                 <button

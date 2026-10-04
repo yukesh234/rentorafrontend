@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import { Radio, Loader2 } from 'lucide-react';
 import { useWebRTCViewer } from '../webrtc/useWebRTCViewer';
 import { useLiveChat } from '../webrtc/useLiveChat';
@@ -8,18 +8,33 @@ import { getStreamByBooking } from '../services/liveStreamingService';
 import { useAuthStore } from '../stores/Authstore';
 import LiveChatPanel from '../components/livestream/LiveChatPanel';
 
+// guests need an id so the broadcaster can address its WebRTC offer to them
+function getGuestIdentity() {
+  let id = sessionStorage.getItem('rentora-guest-id');
+  if (!id) {
+    id = crypto.randomUUID();
+    sessionStorage.setItem('rentora-guest-id', id);
+  }
+  return { id, name: `Guest ${id.slice(0, 4)}` };
+}
+
 export default function WatchStreamPage() {
   const { bookingId } = useParams();
   const navigate = useNavigate();
-  const userid = useAuthStore((s) => s.user.userid);
-  const username = useAuthStore((s) => s.user.name);
+  const { openAuth } = useOutletContext();
+  const user = useAuthStore((s) => s.user);
+  const authIsLoading = useAuthStore((s) => s.isLoading);
+  const [guest] = useState(getGuestIdentity);
   const videoRef = useRef(null);
+
+  const isLoggedIn = Boolean(user?.userid);
+  const userid = user?.userid ?? guest.id;
+  const username = user?.name ?? guest.name;
 
   const [stream, setStream] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [broadcasterId, setBroadcasterId] = useState(null);
-  const authIsLoading = useAuthStore((s) => s.isLoading);
 
   const { remoteStream, connectionState, streamEnded } = useWebRTCViewer(
     bookingId,
@@ -31,7 +46,6 @@ export default function WatchStreamPage() {
   // the live is over if the host ended it, or the connection to the host dropped
   const isOver = streamEnded || connectionState === 'disconnected';
 
-  // Fetch stream metadata once — NOT dependent on remoteStream
   useEffect(() => {
     if (authIsLoading) return;
 
@@ -54,9 +68,6 @@ export default function WatchStreamPage() {
     fetchStream();
   }, [bookingId, authIsLoading]);
 
-  // Attach the remote stream to the video element whenever it changes.
-  // The <video> element is now ALWAYS rendered (see JSX below), so
-  // videoRef.current is never null by the time remoteStream arrives.
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.srcObject = remoteStream;
@@ -107,14 +118,8 @@ export default function WatchStreamPage() {
           </div>
           <p className="mt-1 text-xs text-[#8A7F76]">Hosted by {stream?.broadcasterName}</p>
 
-          {/* video element is ALWAYS mounted; the overlays sit on top */}
           <div className="relative mt-4 aspect-video overflow-hidden rounded-xl border border-[#2A2622] bg-black">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              className="h-full w-full object-cover"
-            />
+            <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
             {connectionState === 'connecting' && !isOver && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 text-[#8A7F76]">
                 <Loader2 size={24} className="animate-spin" />
@@ -146,7 +151,12 @@ export default function WatchStreamPage() {
         </div>
 
         <div className="h-100 lg:h-auto">
-          <LiveChatPanel messages={messages} onSend={sendMessage} disabled={isOver} />
+          <LiveChatPanel
+            messages={messages}
+            onSend={sendMessage}
+            disabled={isOver}
+            onLoginRequest={!isLoggedIn ? () => openAuth('login') : undefined}
+          />
         </div>
       </div>
     </div>

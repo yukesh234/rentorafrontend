@@ -40,3 +40,7 @@ export async function getBookedSlots(listingId) {
   const res = await axios.get(`/api/bookings/listing/${listingId}/booked-slots`);
   return res.data;
 }
+export async function markRefunded(id) {
+  const res = await axios.patch(`/api/bookings/${id}/mark-refunded`);
+  return res.data;
+}

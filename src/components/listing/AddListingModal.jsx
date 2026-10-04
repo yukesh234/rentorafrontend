@@ -33,7 +33,8 @@ export default function AddListingModal({ existingListing, onClose, onCreated, o
   const isEditMode = Boolean(existingListing);
 
   const [form, setForm] = useState(emptyForm);
-  const [existingImageUrls, setExistingImageUrls] = useState([]);
+  const [existingImages, setExistingImages] = useState([]); // [{ id, url }]
+  const [deletingImageId, setDeletingImageId] = useState(null);
   const [newFiles, setNewFiles] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,10 +56,10 @@ export default function AddListingModal({ existingListing, onClose, onCreated, o
         openingTime: toTimeInputValue(existingListing.openingTime),
         closingTime: toTimeInputValue(existingListing.closingTime),
       });
-      setExistingImageUrls(existingListing.imageUrls ?? []);
+      setExistingImages(existingListing.images ?? []);
     } else {
       setForm(emptyForm);
-      setExistingImageUrls([]);
+      setExistingImages([]);
     }
     setNewFiles([]);
     setError(null);
@@ -80,8 +81,22 @@ export default function AddListingModal({ existingListing, onClose, onCreated, o
     }));
   }
 
+  async function handleDeleteImage(imageId) {
+    setError(null);
+    setDeletingImageId(imageId);
+    try {
+      const res = await axios.delete(`/api/v1/listings/${existingListing.id}/images/${imageId}`);
+      setExistingImages(res.data.images ?? []);
+      onUpdated(res.data); // keeps the listing card in the background in sync
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Could not delete this photo.');
+    } finally {
+      setDeletingImageId(null);
+    }
+  }
+
   async function handleGenerateDescription() {
-    const hasAnyImage = newFiles.length > 0 || existingImageUrls.length > 0;
+    const hasAnyImage = newFiles.length > 0 || existingImages.length > 0;
     if (!hasAnyImage) {
       setError('Add at least one photo before generating a description.');
       return;
@@ -170,17 +185,37 @@ export default function AddListingModal({ existingListing, onClose, onCreated, o
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
-          {existingImageUrls.length > 0 && (
+          {existingImages.length > 0 && (
             <Field label="Current photos">
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {existingImageUrls.map((url, i) => (
-                  <div key={i} className="aspect-square overflow-hidden rounded-lg border border-[#2A2622]">
-                    <img src={url} alt={`Existing ${i + 1}`} className="h-full w-full object-cover" />
+                {existingImages.map((img, i) => (
+                  <div
+                    key={img.id}
+                    className="group relative aspect-square overflow-hidden rounded-lg border border-[#2A2622]"
+                  >
+                    <img
+                      src={img.url}
+                      alt={`Existing ${i + 1}`}
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteImage(img.id)}
+                      disabled={deletingImageId === img.id}
+                      className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 disabled:opacity-100"
+                      aria-label="Delete photo"
+                    >
+                      {deletingImageId === img.id ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <X size={12} strokeWidth={2.5} />
+                      )}
+                    </button>
                   </div>
                 ))}
               </div>
               <p className="mt-1.5 text-xs text-[#6B615A]">
-                Existing photos stay as-is. Add more below, or manage individual photos from the listing card.
+                Click × on a photo to delete it. Deleting is immediate and can't be undone.
               </p>
             </Field>
           )}

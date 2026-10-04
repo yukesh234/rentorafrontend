@@ -1,9 +1,10 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Trophy, Users, Plus, Loader2, Shuffle } from 'lucide-react';
+import { Trophy, Users, Plus, Loader2, Shuffle, X } from 'lucide-react';
 import {
-  getTournament, getTeams, addTeam, generateBracket, getMatches, getStandings, updateMatchScore,
+  getTournament, getTeams, addTeam, removeTeam, generateBracket, getMatches,
+  getStandings, updateMatchScore, updateMatchSchedule,
 } from '../services/tournamentService';
 import { useAuthStore } from '../stores/Authstore';
 import BracketView from '../components/tournament/BracketView';
@@ -21,15 +22,15 @@ export default function TournamentDetailPage() {
 
   const [newTeamName, setNewTeamName] = useState('');
   const [isAddingTeam, setIsAddingTeam] = useState(false);
+  const [removingId, setRemovingId] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
 
   const isOrganizer = tournament && userId === tournament.organizerId;
   const isStandingsFormat = tournament?.format === 'ROUND_ROBIN' || tournament?.format === 'LEAGUE';
   const authIsLoading = useAuthStore((s) => s.isLoading);
-
   useEffect(() => {
-    if (authIsLoading) return; 
+    if (authIsLoading) return;
     fetchAll();
   }, [id, authIsLoading]);
 
@@ -71,6 +72,19 @@ export default function TournamentDetailPage() {
     }
   }
 
+  async function handleRemoveTeam(teamId) {
+    setError('');
+    setRemovingId(teamId);
+    try {
+      await removeTeam(id, teamId);
+      setTeams((prev) => prev.filter((t) => t.id !== teamId));
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Could not remove team.');
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
   async function handleGenerateBracket() {
     setError('');
     setIsGenerating(true);
@@ -86,7 +100,14 @@ export default function TournamentDetailPage() {
 
   async function handleScoreUpdate(matchId, scoreA, scoreB) {
     const updated = await updateMatchScore(matchId, scoreA, scoreB);
-    await fetchAll(); // refetch — winners may have advanced, standings changed
+    await fetchAll(); // refetch: winners/losers may have moved, standings changed
+    return updated;
+  }
+
+  async function handleScheduleUpdate(matchId, scheduledAt) {
+    const updated = await updateMatchSchedule(matchId, scheduledAt);
+    // only one match changed, so patch it locally instead of reloading the page
+    setMatches((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
     return updated;
   }
 
@@ -99,6 +120,12 @@ export default function TournamentDetailPage() {
   }
 
   if (!tournament) return null;
+
+  const myTeam = teams.find((t) => t.registeredById === userId);
+  const isFull = teams.length >= tournament.maxTeams;
+  // the organizer can add any number of teams, everyone else gets one
+    const canRegister = !!userId && !isFull && (isOrganizer || !myTeam);
+  const needsMoreTeamsForFormat = tournament.format === 'DOUBLE_ELIMINATION' && teams.length < 3;
 
   return (
     <div className="min-h-screen bg-[#1C1917] px-4 py-8 sm:px-6 lg:px-8">
@@ -129,20 +156,43 @@ export default function TournamentDetailPage() {
             </div>
 
             <div className="mt-3 space-y-1.5">
-              {teams.map((team) => (
-                <div key={team.id} className="rounded-lg bg-[#181512] px-3 py-2 text-sm text-[#D9CFC6]">
-                  {team.name}
-                </div>
-              ))}
+              {teams.length === 0 && (
+                <p className="text-xs text-[#6B615A]">No teams registered yet.</p>
+              )}
+              {teams.map((team) => {
+                const isMine = team.registeredById === userId;
+                const canRemove = isOrganizer || isMine;
+                return (
+                  <div
+                    key={team.id}
+                    className="flex items-center justify-between rounded-lg bg-[#181512] px-3 py-2 text-sm text-[#D9CFC6]"
+                  >
+                    <span>
+                      {team.name}
+                      {isMine && <span className="ml-2 text-[11px] text-[#D4A574]">(your team)</span>}
+                    </span>
+                    {canRemove && (
+                      <button
+                        onClick={() => handleRemoveTeam(team.id)}
+                        disabled={removingId === team.id}
+                        className="rounded p-1 text-[#8A7F76] transition-colors hover:bg-[#3A1F1A] hover:text-[#E07856] disabled:opacity-50"
+                        aria-label={`Remove ${team.name}`}
+                      >
+                        {removingId === team.id ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
-            {isOrganizer && teams.length < tournament.maxTeams && (
+            {canRegister && (
               <form onSubmit={handleAddTeam} className="mt-3 flex gap-2">
                 <input
                   type="text"
                   value={newTeamName}
                   onChange={(e) => setNewTeamName(e.target.value)}
-                  placeholder="Team name"
+                  placeholder={isOrganizer ? 'Team name' : 'Your team name'}
                   className="w-full rounded-lg border border-[#2A2622] bg-[#181512] px-3 py-2 text-sm text-[#F5F0EB] placeholder:text-[#5A524A] outline-none focus:border-[#C2542D]/60"
                 />
                 <button
@@ -151,20 +201,36 @@ export default function TournamentDetailPage() {
                   className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#C2542D] px-4 py-2 text-sm font-medium text-[#1C1917] hover:bg-[#D4A574] disabled:opacity-50"
                 >
                   {isAddingTeam ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                  Add
+                  {isOrganizer ? 'Add' : 'Register'}
                 </button>
               </form>
             )}
 
+            {!isOrganizer && isFull && !myTeam && (
+              <p className="mt-3 text-xs text-[#6B615A]">This tournament is full.</p>
+            )}
+            {!isOrganizer && myTeam && (
+              <p className="mt-3 text-xs text-[#6B615A]">
+                You're registered. The organizer will generate the bracket once enough teams have joined.
+              </p>
+            )}
+
             {isOrganizer && teams.length >= 2 && (
-              <button
-                onClick={handleGenerateBracket}
-                disabled={isGenerating}
-                className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#C2542D]/50 py-2.5 text-sm font-medium text-[#D4A574] hover:bg-[#C2542D]/10 disabled:opacity-50"
-              >
-                {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Shuffle size={14} />}
-                {isGenerating ? 'Generating…' : 'Generate bracket'}
-              </button>
+              <>
+                <button
+                  onClick={handleGenerateBracket}
+                  disabled={isGenerating || needsMoreTeamsForFormat}
+                  className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#C2542D]/50 py-2.5 text-sm font-medium text-[#D4A574] hover:bg-[#C2542D]/10 disabled:opacity-50"
+                >
+                  {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Shuffle size={14} />}
+                  {isGenerating ? 'Generating…' : 'Generate bracket'}
+                </button>
+                {needsMoreTeamsForFormat && (
+                  <p className="mt-1.5 text-center text-[11px] text-[#6B615A]">
+                    Double elimination needs at least 3 teams.
+                  </p>
+                )}
+              </>
             )}
           </div>
         )}
@@ -182,6 +248,7 @@ export default function TournamentDetailPage() {
               format={tournament.format}
               isOrganizer={isOrganizer}
               onScoreUpdate={handleScoreUpdate}
+              onScheduleUpdate={handleScheduleUpdate}
             />
           </div>
         )}

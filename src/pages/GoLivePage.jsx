@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Radio, Users, Loader2, Square } from 'lucide-react';
+import { Radio, Users, Loader2, Square, Check, Link2 } from 'lucide-react';
 import { useWebRTCBroadcaster } from '../webrtc/useWebRTCBroadcaster';
 import { useLiveChat } from '../webrtc/useLiveChat';
 import { startStream, endStream } from '../services/liveStreamingService';
@@ -20,6 +20,13 @@ export default function GoLivePage() {
 
   const { localStream, viewerCount, error: mediaError } = useWebRTCBroadcaster(bookingId, user?.userid);
   const { messages, sendMessage } = useLiveChat(bookingId, user?.userid, user?.name);
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopyLink() {
+    await navigator.clipboard.writeText(`${window.location.origin}/live/${bookingId}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   useEffect(() => {
     async function begin() {
@@ -87,14 +94,24 @@ export default function GoLivePage() {
                 {viewerCount} watching
               </span>
             </div>
-            <button
-              onClick={handleEndStream}
-              disabled={isEnding}
-              className="flex items-center gap-1.5 rounded-lg bg-[#C23D2D] px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-[#A8331F] disabled:opacity-50"
-            >
-              <Square size={12} />
-              {isEnding ? 'Ending…' : 'End stream'}
-            </button>
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleCopyLink}
+                className="flex items-center gap-1.5 rounded-lg border border-[#2A2622] px-4 py-2 text-xs font-medium text-[#D4A574] transition-colors hover:bg-[#2A2622]"
+              >
+                {copied ? <Check size={12} /> : <Link2 size={12} />}
+                {copied ? 'Copied' : 'Copy watch link'}
+              </button>
+              <button
+                onClick={handleEndStream}
+                disabled={isEnding}
+                className="flex items-center gap-1.5 rounded-lg bg-[#C23D2D] px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-[#A8331F] disabled:opacity-50"
+              >
+                <Square size={12} />
+                {isEnding ? 'Ending…' : 'End stream'}
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 aspect-video overflow-hidden rounded-xl border border-[#2A2622] bg-black">

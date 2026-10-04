@@ -5,9 +5,9 @@ import { createTournament } from '../services/tournamentService';
 
 const FORMATS = [
   { value: 'KNOCKOUT', label: 'Knockout' },
-  { value: 'DOUBLE_ELIMINATION', label: 'Double Elimination' },
-  { value: 'ROUND_ROBIN', label: 'Round Robin' },
-  { value: 'LEAGUE', label: 'League' },
+  { value: 'DOUBLE_ELIMINATION', label: 'Double Elimination (3+ teams)' },
+  { value: 'ROUND_ROBIN', label: 'Round Robin (everyone plays once)' },
+  { value: 'LEAGUE', label: 'League (home & away)' },
 ];
 
 export default function CreateTournamentPage() {

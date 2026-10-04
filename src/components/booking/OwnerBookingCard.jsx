@@ -8,13 +8,15 @@ const STATUS_STYLES = {
   COMPLETED: 'bg-blue-500/15 text-blue-400',
 };
 
-
-export default function OwnerBookingCard({ booking, onMarkPaid }) {
+export default function OwnerBookingCard({ booking, onMarkPaid, onMarkRefunded }) {
   const [isMarking, setIsMarking] = useState(false);
+  const [isRefunding, setIsRefunding] = useState(false);
   const [error, setError] = useState('');
 
-  const refundOwed =
+  const wasPaidViaEsewa =
     booking.status === 'CANCELLED' && booking.paymentMethod === 'ESEWA' && booking.isPaid;
+  const refundOwed = wasPaidViaEsewa && !booking.isRefunded;
+  const refundSent = wasPaidViaEsewa && booking.isRefunded;
 
   async function handleMarkPaid() {
     setError('');
@@ -25,6 +27,18 @@ export default function OwnerBookingCard({ booking, onMarkPaid }) {
       setError(err?.response?.data?.message || 'Could not update this booking.');
     } finally {
       setIsMarking(false);
+    }
+  }
+
+  async function handleMarkRefunded() {
+    setError('');
+    setIsRefunding(true);
+    try {
+      await onMarkRefunded(booking.id);
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Could not update this booking.');
+    } finally {
+      setIsRefunding(false);
     }
   }
 
@@ -66,10 +80,24 @@ export default function OwnerBookingCard({ booking, onMarkPaid }) {
       </div>
 
       {refundOwed && (
-        <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-[#3A1F1A] px-3 py-2 text-xs text-[#E07856]">
-          <AlertCircle size={13} className="shrink-0" />
-          Cancelled after payment — refund owed to renter.
+        <div className="mt-3 rounded-lg bg-[#3A1F1A] px-3 py-2.5">
+          <div className="flex items-center gap-1.5 text-xs text-[#E07856]">
+            <AlertCircle size={13} className="shrink-0" />
+            Cancelled after payment — refund owed to renter.
+          </div>
+          <button
+            onClick={handleMarkRefunded}
+            disabled={isRefunding}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#E07856]/40 py-1.5 text-xs font-medium text-[#E07856] transition-colors hover:bg-[#E07856]/10 disabled:opacity-50"
+          >
+            {isRefunding ? <Loader2 size={13} className="animate-spin" /> : null}
+            {isRefunding ? 'Updating…' : 'Mark refund as sent'}
+          </button>
         </div>
+      )}
+
+      {refundSent && (
+        <p className="mt-3 text-center text-xs text-green-400">✓ Refund sent to renter</p>
       )}
 
       {error && (
@@ -92,7 +120,6 @@ export default function OwnerBookingCard({ booking, onMarkPaid }) {
       {booking.paymentMethod === 'CASH' && booking.isPaid && (
         <p className="mt-3 text-center text-xs text-green-400">✓ Cash payment received</p>
       )}
-
     </div>
   );
 }

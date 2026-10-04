@@ -58,3 +58,7 @@ export async function getMyTournaments() {
 export async function deleteTournament(id) {
   await axios.delete(`/api/tournaments/${id}`);
 }
+
+export async function removeTeam(tournamentId, teamId) {
+  await axios.delete(`/api/tournaments/${tournamentId}/teams/${teamId}`);
+}

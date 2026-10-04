@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Inbox } from 'lucide-react';
-import { getOwnerBookings, markCashPaymentReceived } from '../services/bookingService';
+import { getOwnerBookings, markCashPaymentReceived, markRefunded } from '../services/bookingService';
 import OwnerBookingCard from '../components/booking/OwnerBookingCard';
 import { useAuthStore } from '../stores/Authstore';
 
@@ -8,12 +8,12 @@ export default function OwnerBookingsPage() {
   const [bookings, setBookings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const authIsLoading = useAuthStore((s) => s.isLoading);
-    
-    useEffect(() => {
-       if (authIsLoading) return;
-      // eslint-disable-next-line react-hooks/immutability
-     fetchBookings();
-    }, [authIsLoading]);
+
+  useEffect(() => {
+    if (authIsLoading) return;
+    // eslint-disable-next-line react-hooks/immutability
+    fetchBookings();
+  }, [authIsLoading]);
 
   async function fetchBookings() {
     setIsLoading(true);
@@ -29,6 +29,11 @@ export default function OwnerBookingsPage() {
 
   async function handleMarkPaid(id) {
     const updated = await markCashPaymentReceived(id);
+    setBookings((prev) => prev.map((b) => (b.id === id ? updated : b)));
+  }
+
+  async function handleMarkRefunded(id) {
+    const updated = await markRefunded(id);
     setBookings((prev) => prev.map((b) => (b.id === id ? updated : b)));
   }
 
@@ -52,7 +57,12 @@ export default function OwnerBookingsPage() {
             <p className="text-sm text-[#8A7F76]">No bookings on your listings yet.</p>
           ) : (
             bookings.map((booking) => (
-              <OwnerBookingCard key={booking.id} booking={booking} onMarkPaid={handleMarkPaid} />
+              <OwnerBookingCard
+                key={booking.id}
+                booking={booking}
+                onMarkPaid={handleMarkPaid}
+                onMarkRefunded={handleMarkRefunded}
+              />
             ))
           )}
         </div>

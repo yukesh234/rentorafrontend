@@ -1,7 +1,9 @@
-import { CalendarDays, Package, Loader2, Radio, Star, ChevronDown, ImageOff, Trophy } from 'lucide-react';
+import { CalendarDays, Package, Loader2, Radio, Star, ChevronDown, ImageOff, Trophy, CreditCard } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { submitReview } from '../../services/reviewService';
+import { initiatePayment } from '../../services/paymentService';
+import EsewaRedirectForm from '../payment/EsewaRedirectionForm';
 
 const STATUS_STYLES = {
   PENDING: 'bg-yellow-500/15 text-yellow-400',
@@ -12,9 +14,15 @@ const STATUS_STYLES = {
 
 const LIVE_ELIGIBLE_CATEGORIES = ['ENTERTAINMENT', 'SPORTS'];
 
+// must match UNPAID_ESEWA_TTL in BookingLifecycleScheduler (30 minutes)
+const UNPAID_ESEWA_TTL_MS = 30 * 60 * 1000;
+
 export default function BookingCard({ booking, onCancel }) {
   const [isCancelling, setIsCancelling] = useState(false);
   const [error, setError] = useState('');
+
+  const [isPaying, setIsPaying] = useState(false);
+  const [redirectData, setRedirectData] = useState(null);
 
   const [reviewOpen, setReviewOpen] = useState(false);
   const [rating, setRating] = useState(0);
@@ -29,6 +37,23 @@ export default function BookingCard({ booking, onCancel }) {
 
   const canCancel =
     !hasEnded && (booking.status === 'PENDING' || booking.status === 'CONFIRMED');
+
+  // unpaid eSewa bookings are auto-cancelled 30 minutes after they were created
+  const payDeadline = booking.createdAt
+    ? new Date(new Date(booking.createdAt).getTime() + UNPAID_ESEWA_TTL_MS)
+    : null;
+
+    
+
+  const refundSent =
+  booking.status === 'CANCELLED' && booking.paymentMethod === 'ESEWA' && booking.isPaid && booking.isRefunded;
+
+  const canPayNow =
+    !hasEnded &&
+    booking.status === 'PENDING' &&
+    booking.paymentMethod === 'ESEWA' &&
+    !booking.isPaid &&
+    (!payDeadline || now < payDeadline);
 
   const canGoLive =
     !hasEnded &&
@@ -46,9 +71,7 @@ export default function BookingCard({ booking, onCancel }) {
     !booking.hasReviewed &&
     !reviewSubmitted;
 
-  const refundPending =
-    booking.status === 'CANCELLED' && booking.paymentMethod === 'ESEWA' && booking.isPaid;
-
+ const refundPending = booking.status === 'CANCELLED' && booking.paymentMethod === 'ESEWA' && booking.isPaid && !booking.isRefunded;
   async function handleCancel() {
     setError('');
     setIsCancelling(true);
@@ -58,6 +81,18 @@ export default function BookingCard({ booking, onCancel }) {
       setError(err?.response?.data?.message || 'Could not cancel this booking.');
     } finally {
       setIsCancelling(false);
+    }
+  }
+
+  async function handlePayNow() {
+    setError('');
+    setIsPaying(true);
+    try {
+      const payment = await initiatePayment(booking.id);
+      setRedirectData(payment); // EsewaRedirectForm auto-submits and leaves the page
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Could not start the payment. Please try again.');
+      setIsPaying(false);
     }
   }
 
@@ -141,9 +176,31 @@ export default function BookingCard({ booking, onCancel }) {
             Refund pending — the owner will process this manually.
           </p>
         )}
+        {refundSent && (
+          <p className="mb-3 text-center text-xs text-green-400">✓ The owner has sent your refund.</p>
+        )}
 
         {error && (
           <p className="mb-3 rounded-lg bg-[#3A1F1A] px-3 py-2 text-xs text-[#E07856]">{error}</p>
+        )}
+
+        {canPayNow && (
+          <div className="mb-2">
+            <button
+              onClick={handlePayNow}
+              disabled={isPaying}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#C2542D] py-2 text-xs font-medium text-[#1C1917] transition-colors hover:bg-[#D4A574] disabled:opacity-50"
+            >
+              {isPaying ? <Loader2 size={13} className="animate-spin" /> : <CreditCard size={13} />}
+              {isPaying ? 'Redirecting to eSewa…' : `Pay now · Rs. ${booking.totalAmount}`}
+            </button>
+            {payDeadline && (
+              <p className="mt-1.5 text-center text-[11px] text-[#6B615A]">
+                Pay before {payDeadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} or this
+                booking is cancelled automatically.
+              </p>
+            )}
+          </div>
         )}
 
         {canGoLive && (
@@ -156,7 +213,7 @@ export default function BookingCard({ booking, onCancel }) {
           </Link>
         )}
 
-                {canCreateTournament && !booking.hasTournament && (
+        {canCreateTournament && !booking.hasTournament && (
           <Link
             to={`/create-tournament/${booking.id}`}
             className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#2A2622] py-2 text-xs font-medium text-[#D4A574] transition-colors hover:bg-[#2A2622]"
@@ -179,7 +236,7 @@ export default function BookingCard({ booking, onCancel }) {
         {canCancel && (
           <button
             onClick={handleCancel}
-            disabled={isCancelling}
+            disabled={isCancelling || isPaying}
             className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#2A2622] py-2 text-xs font-medium text-[#A89A8C] transition-colors hover:bg-[#3A1F1A] hover:text-[#E07856] disabled:opacity-50"
           >
             {isCancelling ? <Loader2 size={13} className="animate-spin" /> : null}
@@ -262,6 +319,14 @@ export default function BookingCard({ booking, onCancel }) {
           </div>
         )}
       </div>
+
+      {/* hidden form: auto-submits to eSewa as soon as it mounts */}
+      {redirectData && (
+        <EsewaRedirectForm
+          paymentUrl={redirectData.paymentUrl}
+          formFields={redirectData.formFields}
+        />
+      )}
     </div>
   );
 }
